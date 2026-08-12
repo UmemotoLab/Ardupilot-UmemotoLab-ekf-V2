@@ -46,12 +46,23 @@ void Copter::userhook_SuperSlowLoop()
 #ifdef USERHOOK_AUXSWITCH
 void Copter::userhook_auxSwitch1(const RC_Channel::AuxSwitchPos ch_flag)
 {
-    // put your aux switch #1 handler here (CHx_OPT = 47)
+    // CH7: Observer 制御ON/OFF (3ポジションスイッチ)
+    // HIGH=ON, MIDDLE/LOW=OFF
+    const bool enable = (ch_flag == RC_Channel::AuxSwitchPos::HIGH);
+    observer.set_control_enabled(enable);
+#if HAL_GCS_ENABLED
+    gcs().send_text(MAV_SEVERITY_INFO, "AP_Observer: Control %s", enable ? "ENABLED" : "DISABLED");
+#endif
 }
 
 void Copter::userhook_auxSwitch2(const RC_Channel::AuxSwitchPos ch_flag)
 {
-    // put your aux switch #2 handler here (CHx_OPT = 48)
+    // CH8: EKFリセット (モーメンタリスイッチ: HIGH→LOWエッジ検出)
+    static RC_Channel::AuxSwitchPos prev = RC_Channel::AuxSwitchPos::LOW;
+    if (prev == RC_Channel::AuxSwitchPos::HIGH && ch_flag == RC_Channel::AuxSwitchPos::LOW) {
+        observer.reset_ekf_to_initial_state();
+    }
+    prev = ch_flag;
 }
 
 void Copter::userhook_auxSwitch3(const RC_Channel::AuxSwitchPos ch_flag)

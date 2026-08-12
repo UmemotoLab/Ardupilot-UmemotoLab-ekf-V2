@@ -87,6 +87,12 @@ public:
     virtual const AC_PID& get_rate_pitch_pid() const = 0;
     virtual const AC_PID& get_rate_yaw_pid() const = 0;
 
+    // 外部補正クォータニオンを設定する
+    void set_correction_quaternion(const Quaternion& correction);
+
+    // 外部補正をオイラー角形式で設定する（累積しない方式用）
+    void set_correction_euler(const Vector3f& correction_euler);
+
     // get the roll acceleration limit in radians/s/s
     float get_accel_roll_max_radss() const { return radians(_accel_roll_max_degss); }
 
@@ -607,6 +613,10 @@ protected:
 
     // Intersampling period in seconds
     float               _dt_s;
+
+    // 外部補正用メンバ
+    Quaternion _external_correction;
+    Vector3f _external_correction_euler;  // オイラー角形式の補正（累積しない方式用）
 
     // This represents a 321-intrinsic rotation in NED frame to the target (setpoint)
     // attitude used in the attitude controller, in radians.

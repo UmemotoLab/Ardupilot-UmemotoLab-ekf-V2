@@ -151,6 +151,8 @@
 #include <AC_CustomControl/AC_CustomControl.h>                  // Custom control library
 #endif
 
+#include <AP_Observer/AP_Observer.h>
+
 #if MODE_BRAKE_ENABLED && !MODE_ALTHOLD_ENABLED
   #error Brake mode requires AltHold; disable MODE_BRAKE_ENABLED or enable MODE_ALTHOLD_ENABLED
 #endif
@@ -232,6 +234,9 @@ public:
     friend class PayloadPlace;
 
     Copter(void);
+
+    // Observer へのアクセス用アクセサ
+    AP_Observer& get_observer() { return observer; }
 
 private:
 
@@ -528,6 +533,8 @@ private:
     AP_Parachute parachute;
 #endif
 
+    AP_Observer observer;
+
     // Landing Gear Controller
 #if AP_LANDINGGEAR_ENABLED
     AP_LandingGear landinggear;
@@ -561,6 +568,9 @@ private:
 
     // last valid RC input time
     uint32_t last_radio_update_ms;
+
+    // last time the observer computed a new correction
+    uint32_t _last_obs_update_ms = 0;
 
     // last esc calibration notification update
     uint32_t esc_calibration_notify_update_ms;
@@ -1032,6 +1042,8 @@ private:
     void userhook_auxSwitch1(const RC_Channel::AuxSwitchPos ch_flag);
     void userhook_auxSwitch2(const RC_Channel::AuxSwitchPos ch_flag);
     void userhook_auxSwitch3(const RC_Channel::AuxSwitchPos ch_flag);
+
+    void observer_update();
 
 #if MODE_ACRO_ENABLED
 #if FRAME_CONFIG == HELI_FRAME

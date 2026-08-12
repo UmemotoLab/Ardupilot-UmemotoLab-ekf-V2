@@ -166,6 +166,9 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
 #if AP_COPTER_AHRS_AUTO_TRIM_ENABLED
     SCHED_TASK_CLASS(RC_Channels_Copter,   &copter.g2.rc_channels,      auto_trim_run,   10,  75,  30),
 #endif
+
+    SCHED_TASK(observer_update,       100,    50,  31), // 推力推定
+
 #if AP_RANGEFINDER_ENABLED
     SCHED_TASK(read_rangefinder,      20,    100,  33),
 #endif
@@ -950,6 +953,19 @@ bool Copter::get_rate_ef_targets(Vector3f& rate_ef_targets_rads) const
 /*
   constructor for main Copter class
  */
+void Copter::observer_update() {
+    observer.update();
+
+    // Observer が新しい補正を計算したタイミングでのみ取り込む
+    uint32_t obs_ms = observer.get_last_update_ms();
+    if (obs_ms != _last_obs_update_ms && observer.is_correction_valid()) {
+        _last_obs_update_ms = obs_ms;
+        // オイラー角形式の補正を使用（累積しない方式）
+        Vector3f correction_euler = observer.get_correction_euler();
+        attitude_control->set_correction_euler(correction_euler);
+    }
+}
+
 Copter::Copter(void)
     :
     pos_variance_filt(FS_EKF_FILT_DEFAULT),

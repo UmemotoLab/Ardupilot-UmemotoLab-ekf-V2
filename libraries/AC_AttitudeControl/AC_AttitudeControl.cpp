@@ -975,14 +975,27 @@ Quaternion AC_AttitudeControl::attitude_from_thrust_vector(Vector3f thrust_vecto
     return thrust_vec_quat*yaw_quat;
 }
 
+// 補正クォータニオンを更新（後方互換性のため保持）
+void AC_AttitudeControl::set_correction_quaternion(const Quaternion& correction) {
+    _external_correction = correction;
+}
+
+// オイラー角形式で補正値を設定（累積しない方式用）
+void AC_AttitudeControl::set_correction_euler(const Vector3f& correction_euler) {
+    _external_correction_euler = correction_euler;
+}
+
 // Calculates the body frame angular velocities to follow the target attitude
 void AC_AttitudeControl::update_attitude_target()
 {
-    // rotate target and normalize
-    Quaternion attitude_target_update;
-    attitude_target_update.from_axis_angle(_ang_vel_target_rads * _dt_s);
-    _attitude_target *= attitude_target_update;
+    // 基本姿勢更新のみ（補正は attitude_controller_run_quat() 内で一時的に適用）
+    Quaternion delta;
+    delta.from_axis_angle(_ang_vel_target_rads * _dt_s);
+    _attitude_target *= delta;
     _attitude_target.normalize();
+
+    // 補正は _attitude_target に累積させない！
+    // 代わりに attitude_controller_run_quat() 内で一時変数に適用する
 }
 
 // Calculates the body frame angular velocities to follow the target attitude
@@ -992,9 +1005,27 @@ void AC_AttitudeControl::attitude_controller_run_quat()
     Quaternion attitude_body;
     _ahrs.get_quat_body_to_ned(attitude_body);
 
+    // 補正を一時変数に適用（_attitude_targetは触らない）
+    Quaternion effective_target = _attitude_target;
+
+    // オイラー角形式の補正が設定されている場合のみ適用
+    if (!_external_correction_euler.is_zero()) {
+        // 現在の目標姿勢をオイラー角に変換
+        float roll_rad, pitch_rad, yaw_rad;
+        effective_target.to_euler(roll_rad, pitch_rad, yaw_rad);
+
+        // ロールとピッチのみに補正を加算（ヨーは絶対に触らない！）
+        float corrected_roll  = roll_rad  + _external_correction_euler.x;
+        float corrected_pitch = pitch_rad + _external_correction_euler.y;
+        // yaw_rad はそのまま（_external_correction_euler.z は常に0だが明示的に無視）
+
+        // 補正済みのクォータニオンに再変換
+        effective_target.from_euler(corrected_roll, corrected_pitch, yaw_rad);
+    }
+
     // This vector represents the angular error to rotate the thrust vector using x and y and heading using z
     Vector3f attitude_error;
-    thrust_heading_rotation_angles(_attitude_target, attitude_body, attitude_error, _thrust_angle_rad, _thrust_error_angle_rad);
+    thrust_heading_rotation_angles(effective_target, attitude_body, attitude_error, _thrust_angle_rad, _thrust_error_angle_rad);
 
     // Compute the angular velocity corrections in the body frame from the attitude error
     Vector3f ang_vel_body_rads = update_ang_vel_target_from_att_error(attitude_error);
@@ -1003,7 +1034,7 @@ void AC_AttitudeControl::attitude_controller_run_quat()
     ang_vel_limit(ang_vel_body_rads, radians(_ang_vel_roll_max_degs), radians(_ang_vel_pitch_max_degs), radians(_ang_vel_yaw_max_degs));
 
     // rotation from the target frame to the body frame
-    Quaternion rotation_target_to_body = attitude_body.inverse() * _attitude_target;
+    Quaternion rotation_target_to_body = attitude_body.inverse() * effective_target;
 
     // target angle velocity vector in the body frame
     Vector3f ang_vel_body_feedforward = rotation_target_to_body * _ang_vel_target_rads;
@@ -1023,7 +1054,7 @@ void AC_AttitudeControl::attitude_controller_run_quat()
     }
 
     // Record error to handle EKF resets
-    _attitude_ang_error = attitude_body.inverse() * _attitude_target;
+    _attitude_ang_error = attitude_body.inverse() * effective_target;
     // finally update the attitude target
     _ang_vel_body_rads = ang_vel_body_rads;
 }
