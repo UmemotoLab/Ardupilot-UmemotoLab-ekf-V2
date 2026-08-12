@@ -10236,6 +10236,217 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         '''Test Arming Parameter Checks'''
         self.test_parameter_checks_poscontrol("PSC")
 
+    def TestObserverParameters(self):
+        '''Test AP_Observer parameter defaults and set/get'''
+        self.progress("Testing AP_Observer parameter defaults and changes")
+
+        # Verify key parameter defaults
+        expected_defaults = {
+            'OBS_CORR_GAIN': 0.0,
+            'OBS_MAX_CORR_ANG': 0.5,
+            'OBS_PRED_TIME': 0.00,
+            'OBS_EKF_Q_W': 0.0005,
+            'OBS_EKF_R_MEAS': 46.0,
+            'OBS_FADE_TH': 1.0,
+        }
+
+        for param_name, expected_val in expected_defaults.items():
+            actual = self.get_parameter(param_name)
+            self.progress(f"  {param_name}: {actual} (expected {expected_val})")
+            if abs(actual - expected_val) > 0.01:
+                raise NotAchievedException(
+                    f"{param_name} default mismatch: expected {expected_val}, got {actual}"
+                )
+
+        self.progress("PASS: All parameter defaults correct")
+
+        # Test parameter modification
+        test_changes = {
+            'OBS_CORR_GAIN': 0.01,
+            'OBS_MAX_CORR_ANG': 0.3,
+            'OBS_EKF_Q_W': 0.001,
+            'OBS_EKF_R_MEAS': 10.0,
+        }
+        for param_name, new_val in test_changes.items():
+            self.set_parameter(param_name, new_val)
+            self.delay_sim_time(0.5, reason="let parameter take effect")
+            readback = self.get_parameter(param_name)
+            if abs(readback - new_val) > 0.001:
+                raise NotAchievedException(
+                    f"{param_name} set/get failed: wrote {new_val}, read {readback}"
+                )
+
+        self.progress("PASS: Parameter set/get works correctly")
+
+        # Restore defaults
+        for param_name, default_val in expected_defaults.items():
+            if param_name in test_changes:
+                self.set_parameter(param_name, default_val)
+
+        self.progress("PASS: ALL OBSERVER PARAMETER TESTS PASSED")
+
+    def TestObserverLogging(self):
+        '''Test AP_Observer OBSV log messages during flight'''
+        self.context_push()
+        try:
+            self.set_parameters({
+                'LOG_DISARMED': 1,
+                'LOG_DISARMED': 1,
+            })
+            self.disarm_vehicle()
+            self.reboot_sitl()
+
+            self.progress("Taking off to 10m")
+            self.takeoff(10, mode='ALT_HOLD')
+            self.delay_sim_time(5, reason="settle after takeoff")
+
+            self.progress("Hovering for 20 seconds to collect OBSV logs")
+            tstart = self.get_sim_time()
+            self.delay_sim_time(20, reason="collect OBSV logs during hover")
+            tend = self.get_sim_time()
+
+            # Land before log analysis
+            self.do_RTL()
+            self.wait_disarmed()
+
+            # Analyze OBSV log
+            self.progress("Analyzing OBSV log data...")
+            import numpy
+            mlog = self.dfreader_for_current_onboard_log()
+
+            obsv_count = 0
+            fields_found = set()
+            freq_values = []
+            has_nan = False
+
+            while True:
+                m = mlog.recv_match(type='OBSV', blocking=False)
+                if m is None:
+                    break
+                obsv_count += 1
+
+                # Check required fields
+                for field in ['TimeUS', 'PLX', 'PLY', 'PLZ', 'PFX', 'PFY', 'PFZ', 'FX', 'FY', 'CR', 'CP', 'SW']:
+                    if hasattr(m, field):
+                        fields_found.add(field)
+                        val = getattr(m, field)
+                        if isinstance(val, float) and (numpy.isnan(val) or numpy.isinf(val)):
+                            has_nan = True
+
+                if hasattr(m, 'FX'):
+                    freq_values.append(m.FX)
+
+            self.progress(f"Found {obsv_count} OBSV messages")
+            self.progress(f"Fields found: {sorted(fields_found)}")
+
+            if obsv_count == 0:
+                raise NotAchievedException("No OBSV log messages found during flight")
+
+            if obsv_count < 100:
+                raise NotAchievedException(
+                    f"Too few OBSV messages: {obsv_count} (expected >100 for 20s flight)"
+                )
+
+            # Check all expected fields exist
+            expected_fields = {'TimeUS', 'PLX', 'PLY', 'PLZ', 'PFX', 'PFY', 'PFZ', 'FX', 'FY', 'CR', 'CP', 'SW'}
+            missing = expected_fields - fields_found
+            if missing:
+                raise NotAchievedException(f"Missing OBSV fields: {missing}")
+
+            if has_nan:
+                raise NotAchievedException("OBSV log contains NaN/Inf values")
+
+            # Check X-axis frequency is within valid range
+            if len(freq_values) > 0:
+                freq_arr = numpy.asarray(freq_values)
+                freq_median = float(numpy.median(freq_arr))
+                freq_min = float(numpy.min(freq_arr))
+                freq_max = float(numpy.max(freq_arr))
+                self.progress(f"X-axis Frequency: median={freq_median:.4f}, min={freq_min:.4f}, max={freq_max:.4f} Hz")
+
+                # EKF_W_MIN=2.1991 rad/s -> 0.35 Hz, EKF_W_MAX=5.7180 rad/s -> 0.91 Hz
+                if freq_median < 0.30 or freq_median > 1.0:
+                    raise NotAchievedException(
+                        f"X-axis frequency out of valid range: {freq_median:.4f} Hz"
+                    )
+
+            self.progress("PASS: ALL OBSERVER LOGGING TESTS PASSED")
+        finally:
+            self.context_pop()
+
+    def TestObserverEKFOperation(self):
+        '''Test AP_Observer EKF operates correctly during flight'''
+        self.context_push()
+        try:
+            import numpy
+
+            self.set_parameters({
+                'LOG_DISARMED': 1,
+            })
+            self.disarm_vehicle()
+            self.reboot_sitl()
+
+            self.progress("Taking off to 10m")
+            self.takeoff(10, mode='ALT_HOLD')
+            self.delay_sim_time(5, reason="settle after takeoff")
+
+            self.progress("Hovering for 30s to let EKF converge")
+            tstart = self.get_sim_time()
+            self.delay_sim_time(30, reason="let EKF converge during hover")
+            tend = self.get_sim_time()
+
+            self.do_RTL()
+            self.wait_disarmed()
+
+            # Extract EKF state from OBSV log
+            self.progress("Checking EKF state in log...")
+            mlog = self.dfreader_for_current_onboard_log()
+
+            pfx_vals = []
+            freq_vals = []
+            finite_ok = True
+
+            while True:
+                m = mlog.recv_match(
+                    type='OBSV', blocking=False,
+                    condition="OBSV.TimeUS>%u and OBSV.TimeUS<%u" % (
+                        tstart * 1.0e6, tend * 1.0e6))
+                if m is None:
+                    break
+                if hasattr(m, 'PFX'):
+                    pfx_vals.append(m.PFX)
+                    if numpy.isnan(m.PFX) or numpy.isinf(m.PFX):
+                        finite_ok = False
+                if hasattr(m, 'FX'):
+                    freq_vals.append(m.FX)
+                    if numpy.isnan(m.FX) or numpy.isinf(m.FX):
+                        finite_ok = False
+
+            if len(pfx_vals) == 0:
+                raise NotAchievedException("No EKF state data in log")
+
+            if not finite_ok:
+                raise NotAchievedException("EKF state contains NaN/Inf")
+
+            self.progress(f"EKF samples: {len(pfx_vals)}")
+
+            # Frequency should be within EKF bounds
+            if len(freq_vals) > 10:
+                freq_arr = numpy.asarray(freq_vals)
+                f_median = float(numpy.median(freq_arr))
+                f_std = float(numpy.std(freq_arr))
+                self.progress(f"EKF X-axis frequency: {f_median:.4f} +/- {f_std:.4f} Hz")
+
+                # Should be within OBS_EKF_W_MIN/MAX range (0.35-0.91 Hz)
+                if f_median < 0.30 or f_median > 1.0:
+                    raise NotAchievedException(
+                        f"EKF X-axis frequency out of range: {f_median:.4f} Hz"
+                    )
+
+            self.progress("PASS: ALL EKF OPERATION TESTS PASSED")
+        finally:
+            self.context_pop()
+
     def PosHoldTakeOff(self):
         """ensure vehicle stays put until it is ready to fly"""
         self.context_push()
@@ -19700,6 +19911,34 @@ class AutoTestCopterTests2a(AutoTestCopter):
 class AutoTestCopterTests2b(AutoTestCopter):
     def tests(self):
         return self.tests2b()
+
+
+class AutoTestCopterTestsObserver(AutoTestCopter):
+    '''Observer tests only - for lite autotest workflow'''
+    def tests(self):
+        return [
+            self.TestObserverParameters,
+            self.TestObserverLogging,
+            self.TestObserverEKFOperation,
+        ]
+
+
+class AutoTestCopterTestsMedium(AutoTestCopter):
+    '''Observer + core functionality tests - for medium autotest workflow (~2min)'''
+    def tests(self):
+        return [
+            # Observer tests
+            self.TestObserverParameters,
+            self.TestObserverLogging,
+            self.TestObserverEKFOperation,
+            # Core functionality tests
+            self.ArmFeatures,
+            self.ParameterDocumentation,
+            self.ParametersMIS_TOTAL,
+            self.ParametersDownload,
+            self.ModeLoiter,
+            self.MotorFail,
+        ]
 
 
 class AutoTestCAN(AutoTestCopter):
