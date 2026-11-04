@@ -10244,7 +10244,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         expected_defaults = {
             'OBS_CORR_GAIN': 0.0,
             'OBS_MAX_CORR_ANG': 0.5,
-            'OBS_PRED_TIME': 0.00,
+            'OBS_PHASE_RLL': 0.0,
+            'OBS_PHASE_PIT': 0.0,
             'OBS_EKF_Q_W': 0.0005,
             'OBS_EKF_R_MEAS': 46.0,
             'OBS_FADE_TH': 1.0,
@@ -10264,6 +10265,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         test_changes = {
             'OBS_CORR_GAIN': 0.01,
             'OBS_MAX_CORR_ANG': 0.3,
+            'OBS_PHASE_RLL': 30.0,
+            'OBS_PHASE_PIT': -20.0,
             'OBS_EKF_Q_W': 0.001,
             'OBS_EKF_R_MEAS': 10.0,
         }
@@ -10291,10 +10294,13 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         try:
             self.set_parameters({
                 'LOG_DISARMED': 1,
-                'LOG_DISARMED': 1,
             })
             self.disarm_vehicle()
             self.reboot_sitl()
+            self.set_parameters({
+                'OBS_PHASE_RLL': 30.0,
+                'OBS_PHASE_PIT': -20.0,
+            })
 
             self.progress("Taking off to 10m")
             self.takeoff(10, mode='ALT_HOLD')
@@ -10315,26 +10321,37 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             mlog = self.dfreader_for_current_onboard_log()
 
             obsv_count = 0
+            obsd_count = 0
             fields_found = set()
+            obsd_fields_found = set()
+            obsd_phase_by_axis = {0: [], 1: []}
             freq_values = []
             has_nan = False
 
             while True:
-                m = mlog.recv_match(type='OBSV', blocking=False)
+                m = mlog.recv_match(type=['OBSV', 'OBSD'], blocking=False)
                 if m is None:
                     break
-                obsv_count += 1
-
-                # Check required fields
-                for field in ['TimeUS', 'PLX', 'PLY', 'PLZ', 'PFX', 'PFY', 'PFZ', 'FX', 'FY', 'CR', 'CP', 'SW']:
-                    if hasattr(m, field):
-                        fields_found.add(field)
-                        val = getattr(m, field)
-                        if isinstance(val, float) and (numpy.isnan(val) or numpy.isinf(val)):
-                            has_nan = True
-
-                if hasattr(m, 'FX'):
-                    freq_values.append(m.FX)
+                if m.get_type() == 'OBSV':
+                    obsv_count += 1
+                    for field in ['TimeUS', 'PLX', 'PLY', 'PLZ', 'PFX', 'PFY', 'PFZ', 'FX', 'FY', 'CR', 'CP', 'SW']:
+                        if hasattr(m, field):
+                            fields_found.add(field)
+                            val = getattr(m, field)
+                            if isinstance(val, float) and (numpy.isnan(val) or numpy.isinf(val)):
+                                has_nan = True
+                    if hasattr(m, 'FX'):
+                        freq_values.append(m.FX)
+                elif m.get_type() == 'OBSD':
+                    obsd_count += 1
+                    for field in ['TimeUS', 'AX', 'D', 'DD', 'AMP', 'PSID', 'PHCD', 'OM', 'FD', 'VL']:
+                        if hasattr(m, field):
+                            obsd_fields_found.add(field)
+                            val = getattr(m, field)
+                            if isinstance(val, float) and (numpy.isnan(val) or numpy.isinf(val)):
+                                has_nan = True
+                    if hasattr(m, 'AX') and hasattr(m, 'PHCD') and m.AX in obsd_phase_by_axis:
+                        obsd_phase_by_axis[int(m.AX)].append(float(m.PHCD))
 
             self.progress(f"Found {obsv_count} OBSV messages")
             self.progress(f"Fields found: {sorted(fields_found)}")
@@ -10352,6 +10369,27 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             missing = expected_fields - fields_found
             if missing:
                 raise NotAchievedException(f"Missing OBSV fields: {missing}")
+
+            if obsd_count < 10:
+                raise NotAchievedException(
+                    f"Too few OBSD messages: {obsd_count} (expected >10 for 20s flight)"
+                )
+
+            expected_obsd_fields = {'TimeUS', 'AX', 'D', 'DD', 'AMP', 'PSID', 'PHCD', 'OM', 'FD', 'VL'}
+            missing = expected_obsd_fields - obsd_fields_found
+            if missing:
+                raise NotAchievedException(f"Missing OBSD fields: {missing}")
+
+            phase_expected = {0: -20.0, 1: 30.0}
+            for axis, expected_phase in phase_expected.items():
+                values = obsd_phase_by_axis[axis]
+                if len(values) == 0:
+                    raise NotAchievedException(f"No OBSD phase samples for axis {axis}")
+                measured_phase = float(numpy.median(values))
+                if abs(measured_phase - expected_phase) > 0.1:
+                    raise NotAchievedException(
+                        f"OBSD axis {axis} phase mismatch: expected {expected_phase}, got {measured_phase}"
+                    )
 
             if has_nan:
                 raise NotAchievedException("OBSV log contains NaN/Inf values")
