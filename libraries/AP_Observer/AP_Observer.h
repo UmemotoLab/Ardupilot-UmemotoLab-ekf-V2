@@ -10,50 +10,72 @@
 #include <AP_Logger/AP_Logger.h>
 #include <RC_Channel/RC_Channel.h>
 
-class AP_Observer {
+class AP_Observer
+{
 public:
     void init();
     void update();
 
     // ゲッター関数
-    Quaternion get_correction_quaternion() const { return current_correction_quat; }
-    Vector3f get_correction_euler() const { return current_correction_euler; }
+    Quaternion get_correction_quaternion() const
+    {
+        return current_correction_quat;
+    }
+    Vector3f get_correction_euler() const
+    {
+        return current_correction_euler;
+    }
 
     // 補正が最後に計算された時刻を取得
-    uint32_t get_last_update_ms() const { return last_update_ms; }
+    uint32_t get_last_update_ms() const
+    {
+        return last_update_ms;
+    }
 
     // タイムアウト判定
-    bool is_correction_valid() const {
+    bool is_correction_valid() const
+    {
         return (AP_HAL::millis() - last_update_ms) < TIMEOUT_MS;
     }
 
     // デバッグ用：最終更新からの経過時間を取得
-    uint32_t get_update_age_ms() const {
+    uint32_t get_update_age_ms() const
+    {
         return AP_HAL::millis() - last_update_ms;
     }
-    
+
     // 状態ゲッター関数
     Vector3f get_harmonic_sin_coeff() const;
     Vector3f get_harmonic_cos_coeff() const;
     Vector3f get_dc_offset() const;
-    Vector3f get_predicted_force() const;    // Δt秒後の予測外力
-    bool is_frequency_estimation_initialized() const { return ekf_initialized; }
-    
+    Vector3f get_phase_advanced_force() const;
+    float get_axis_estimated_amplitude(uint8_t axis) const;
+    float get_axis_estimated_phase_rad(uint8_t axis) const;
+    float get_axis_phase_command_rad(uint8_t axis) const;
+    bool is_frequency_estimation_initialized() const
+    {
+        return ekf_initialized;
+    }
+
     // ログ記録関数
     void Write_Observer_Log();
-    
+
     // 周波数推定のリセット（アーム時に呼び出し）
     void reset_frequency_estimation();
-    
+
     // 制御の有効/無効を設定
     void set_control_enabled(bool enabled);
-    
+
     // EKFを初期状態にリセット（d, d_dot, cはゼロ、omegaは初期周波数、共分散は再初期化）
     void reset_ekf_to_initial_state();
 
-// #ifdef AP_OBSERVER_REPLAY_TEST
+    // #ifdef AP_OBSERVER_REPLAY_TEST
     // リプレイテスト用
-    void set_replay_time_ms(uint32_t ms) { _test_current_ms = ms; _replay_active = true; }
+    void set_replay_time_ms(uint32_t ms)
+    {
+        _test_current_ms = ms;
+        _replay_active = true;
+    }
     void force_frequency_estimation_update(const Vector3f& payload);
     void set_params_for_replay(float freq, float gain);
     void set_ekf_w_init_hz_for_replay(float freq_hz);
@@ -62,16 +84,17 @@ public:
                                            float q_c);
     void set_ekf_q_w_for_replay(float q_w);
     void set_ekf_r_meas_for_replay(float r_meas);
-    void set_prediction_time_for_replay(float pred_time_sec);
+    void set_phase_for_replay(float roll_phase_deg, float pitch_phase_deg);
     void set_ekf_innovation_limits_for_replay(float innov_max);
-    float get_axis_estimated_frequency(uint8_t axis) const {
+    float get_axis_estimated_frequency(uint8_t axis) const
+    {
         if (axis >= EKF_NUM_AXES) {
             return 0.0f;  // Invalid axis
         }
         return ekf_state[axis][3] / (2.0f * M_PI);  // Convert rad/s to Hz
     }
     // Add logic to get internal EKF state if needed
-// #endif
+    // #endif
 
     // パラメータ定義テーブル
     static const struct AP_Param::GroupInfo var_info[];
@@ -88,7 +111,8 @@ private:
     AP_Float _ekf_omega_init;
     AP_Float _ekf_omega_min;
     AP_Float _ekf_omega_max;
-    AP_Float _prediction_time;
+    AP_Float _phase_roll;
+    AP_Float _phase_pitch;
     AP_Float _max_correction_angle;
     AP_Float _ekf_innov_max;
     AP_Float _out_fade_th;
@@ -98,15 +122,21 @@ private:
     AP_Int8  _ekf_w_freeze;       // 1=freeze omega at initial value, 0=normal EKF update
     // -------------------------------------------------------------
 
-// #ifdef AP_OBSERVER_REPLAY_TEST
+    // #ifdef AP_OBSERVER_REPLAY_TEST
     uint32_t _test_current_ms = 0;
     bool _replay_active = false;
-    uint32_t get_current_time_ms() const { return _replay_active ? _test_current_ms : AP_HAL::millis(); }
-    uint64_t get_current_time_us() const { return _test_current_ms != 0 ? (uint64_t)_test_current_ms * 1000 : AP_HAL::micros64(); }
-// #else
-//    uint32_t get_current_time_ms() const { return AP_HAL::millis(); }
-//    uint64_t get_current_time_us() const { return AP_HAL::micros64(); }
-// #endif
+    uint32_t get_current_time_ms() const
+    {
+        return _replay_active ? _test_current_ms : AP_HAL::millis();
+    }
+    uint64_t get_current_time_us() const
+    {
+        return _test_current_ms != 0 ? (uint64_t)_test_current_ms * 1000 : AP_HAL::micros64();
+    }
+    // #else
+    //    uint32_t get_current_time_ms() const { return AP_HAL::millis(); }
+    //    uint64_t get_current_time_us() const { return AP_HAL::micros64(); }
+    // #endif
 
     Vector3f    current_filtered_force = Vector3f();
     Quaternion  current_correction_quat = Quaternion(1,0,0,0); // 単位クォータニオンで初期化
@@ -156,6 +186,7 @@ private:
     float ekf_axis_k0[OBS_NUM_AXES];
     float ekf_axis_k2[OBS_NUM_AXES];
     uint8_t ekf_axis_dbg_valid[OBS_NUM_AXES];
+    float ekf_axis_phase_rad[OBS_NUM_AXES];
 
     // Control and reset flags
     bool _control_enabled = true;
@@ -168,25 +199,19 @@ private:
     // EKF tuning parameters
 
     // Estimator parameters
-    
-    // 予測用キャッシュ変数（計算量削減）
-    float _omega_rad;                  // ω [rad/s]
 
     // EKF関数
     void ekf_init();
     void ekf_update(const Vector3f& y_output, float dt);
     void ekf_update_axis(uint8_t axis, float measurement, float dt);
-    bool is_axis_frequency_trusted(uint8_t axis) const;
-    Vector3f predict_force_from_state(const float state[EKF_STATE_SIZE], float dt) const;
-    void update_prediction_cache();  // 予測用キャッシュ更新
-    
+
     // 既存の関数
     Quaternion calculate_correction_from_force(const Vector3f& force) const;
     Vector3f calculate_correction_euler_from_force(const Vector3f& force) const;
 
     // 揺れ制御のゲイン
     // ローパスフィルタのカットオフ周波数 [Hz]（パラメータ化）
-    
+
     // 補正角度の最大値
 
     // 定数
@@ -196,8 +221,8 @@ private:
     static constexpr float    THRUST_SCALE          = 6.3157f;
     static constexpr float    THRUST_OFFSET         = -0.9995f;
     static constexpr float    UAV_mass              = 1.4f;
-    
+
     static constexpr float    EKF_INIT_COVARIANCE   = 10.0f;
-    
+
     // ヘルパー関数
 };

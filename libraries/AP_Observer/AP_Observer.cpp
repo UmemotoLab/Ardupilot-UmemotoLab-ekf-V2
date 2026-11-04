@@ -65,14 +65,23 @@ const AP_Param::GroupInfo AP_Observer::var_info[] = {
     // @Range: 1.0 20.0
     // @User: Advanced
     AP_GROUPINFO("EKF_W_MAX", 11, AP_Observer, _ekf_omega_max, 5.7180f),
-    
-    // @Param: PRED_TIME
-    // @DisplayName: Prediction Time
-    // @Description: Time ahead for force prediction [seconds]
-    // @Range: 0.0 0.5
+
+    // @Param: PHASE_RLL
+    // @DisplayName: Roll Phase Advance
+    // @Description: Phase advance applied to the roll-axis harmonic force estimate
+    // @Range: -180 180
+    // @Units: deg
     // @User: Advanced
-    AP_GROUPINFO("PRED_TIME", 13, AP_Observer, _prediction_time, 0.00f),
-    
+    AP_GROUPINFO("PHASE_RLL", 31, AP_Observer, _phase_roll, 0.0f),
+
+    // @Param: PHASE_PIT
+    // @DisplayName: Pitch Phase Advance
+    // @Description: Phase advance applied to the pitch-axis harmonic force estimate
+    // @Range: -180 180
+    // @Units: deg
+    // @User: Advanced
+    AP_GROUPINFO("PHASE_PIT", 32, AP_Observer, _phase_pitch, 0.0f),
+
     // @Param: MAX_CORR_ANG
     // @DisplayName: Maximum Correction Angle
     // @Description: Maximum attitude correction angle for roll and pitch [rad]
@@ -125,7 +134,8 @@ const AP_Param::GroupInfo AP_Observer::var_info[] = {
     AP_GROUPEND
 };
 
-void AP_Observer::init() {
+void AP_Observer::init()
+{
     // パラメータのデフォルト値設定
     AP_Param::setup_object_defaults(this, var_info);
 
@@ -145,13 +155,11 @@ void AP_Observer::init() {
 
     // EKF初期化
     ekf_init();
-    
-    // 予測用キャッシュ初期化
-    update_prediction_cache();
-    
+
 }
 
-void AP_Observer::ekf_init() {
+void AP_Observer::ekf_init()
+{
     const float init_cov = EKF_INIT_COVARIANCE;
     const float init_omega = constrain_value(_ekf_omega_init.get(), _ekf_omega_min.get(), _ekf_omega_max.get());
 
@@ -174,6 +182,7 @@ void AP_Observer::ekf_init() {
         ekf_axis_k0[axis] = 0.0f;
         ekf_axis_k2[axis] = 0.0f;
         ekf_axis_dbg_valid[axis] = 0U;
+        ekf_axis_phase_rad[axis] = 0.0f;
 
         for (uint8_t i = 0; i < EKF_STATE_SIZE; i++) {
             for (uint8_t j = 0; j < EKF_STATE_SIZE; j++) {
@@ -187,24 +196,27 @@ void AP_Observer::ekf_init() {
     ekf_initialized = true;
 }
 
-void AP_Observer::reset_frequency_estimation() {
+void AP_Observer::reset_frequency_estimation()
+{
     // 周波数推定のみをリセット（EKF本体は再初期化）
 #if HAL_GCS_ENABLED
     gcs().send_text(MAV_SEVERITY_INFO, "AP_Observer: Resetting frequency estimation only");
 #endif
 
     ekf_init();
-    
+
 #if HAL_GCS_ENABLED
     gcs().send_text(MAV_SEVERITY_INFO, "AP_Observer: Frequency reset to %.3fHz (EKF)", (double)(_ekf_omega_init.get() / (2.0f * M_PI)));
 #endif
 }
 
-void AP_Observer::set_control_enabled(bool enabled) {
+void AP_Observer::set_control_enabled(bool enabled)
+{
     _control_enabled = enabled;
 }
 
-void AP_Observer::reset_ekf_to_initial_state() {
+void AP_Observer::reset_ekf_to_initial_state()
+{
     const float init_cov = EKF_INIT_COVARIANCE;
     const float init_omega = constrain_value(_ekf_omega_init.get(), _ekf_omega_min.get(), _ekf_omega_max.get());
 
@@ -237,6 +249,7 @@ void AP_Observer::reset_ekf_to_initial_state() {
         ekf_axis_k0[axis] = 0.0f;
         ekf_axis_k2[axis] = 0.0f;
         ekf_axis_dbg_valid[axis] = 0U;
+        ekf_axis_phase_rad[axis] = 0.0f;
 
         // Reset fade control variables
         _fade_timer[axis] = 0.0f;
@@ -256,7 +269,8 @@ void AP_Observer::reset_ekf_to_initial_state() {
 
 
 
-void AP_Observer::ekf_update(const Vector3f& y_output, float dt) {
+void AP_Observer::ekf_update(const Vector3f& y_output, float dt)
+{
     if (!ekf_initialized) {
 #if HAL_GCS_ENABLED
         gcs().send_text(MAV_SEVERITY_WARNING, "EKF: not initialized!");
@@ -276,9 +290,9 @@ void AP_Observer::ekf_update(const Vector3f& y_output, float dt) {
         }
         float measurement = 0.0f;
         switch (axis) {
-            case 0: measurement = y_output.x; break;
-            case 1: measurement = y_output.y; break;
-            case 2: measurement = y_output.z; break;
+        case 0: measurement = y_output.x; break;
+        case 1: measurement = y_output.y; break;
+        case 2: measurement = y_output.z; break;
         }
         ekf_update_axis(axis, measurement, dt);
     }
@@ -288,7 +302,8 @@ void AP_Observer::ekf_update(const Vector3f& y_output, float dt) {
     ekf_sample_count++;
 }
 
-void AP_Observer::ekf_update_axis(uint8_t axis, float measurement, float dt) {
+void AP_Observer::ekf_update_axis(uint8_t axis, float measurement, float dt)
+{
     float* x = ekf_state[axis];
     float (*P)[EKF_STATE_SIZE] = ekf_P[axis];
     const float force_abs = fabsf(measurement);
@@ -363,7 +378,10 @@ void AP_Observer::ekf_update_axis(uint8_t axis, float measurement, float dt) {
     ekf_axis_s[axis] = S;
     if (!isfinite(S) || fabsf(S) < 1.0e-6f) {
         ekf_axis_innovation[axis] = innov_raw;
-        ekf_axis_amp[axis] = fabsf(x[0]);
+        const float omega_safe = MAX(1.0e-3f, x[3]);
+        const float velocity_term = x[1] / omega_safe;
+        ekf_axis_amp[axis] = sqrtf(x[0] * x[0] + velocity_term * velocity_term);
+        ekf_axis_phase_rad[axis] = atan2f(-velocity_term, x[0]);
         return;
     }
 
@@ -423,6 +441,7 @@ void AP_Observer::ekf_update_axis(uint8_t axis, float measurement, float dt) {
     const float term = x[1] / new_omega;
     const float A = sqrtf(x[0]*x[0] + term*term);
     ekf_axis_amp[axis] = A;
+    ekf_axis_phase_rad[axis] = atan2f(-term, x[0]);
 
     const float fade_th = _out_fade_th.get();
     if (A < fade_th) {
@@ -439,13 +458,8 @@ void AP_Observer::ekf_update_axis(uint8_t axis, float measurement, float dt) {
     ekf_axis_omega_updated[axis] = 1U;
 }
 
-void AP_Observer::update_prediction_cache() {
-    // 各軸独立推定: X軸の周波数を予測用キャッシュとして使用
-    const float omega_x = constrain_value(ekf_state[0][3], _ekf_omega_min.get(), _ekf_omega_max.get());
-    _omega_rad = omega_x;
-}
-
-void AP_Observer::update() {
+void AP_Observer::update()
+{
     // モータポインタの安全チェック
     AP_Motors* motors = AP::motors();
     if (!motors) {
@@ -455,14 +469,14 @@ void AP_Observer::update() {
     // スラスト計算
     float throttle = motors->get_throttle_out();
     float thrust = -(THRUST_SCALE * throttle + THRUST_OFFSET) * g;
-    
+
     // ペイロード力計算
     Vector3f payload;
     Vector3f accel = AP::ins().get_accel();
     payload.x = UAV_mass * accel.x;
     payload.y = UAV_mass * accel.y;
     payload.z = UAV_mass * accel.z - thrust;
-    
+
     // フィルタ適用（無効化）
     // _payload_filtered = _payload_filter.apply(payload);
     _payload_filtered = payload; // フィルタなしで生データを使用
@@ -476,11 +490,9 @@ void AP_Observer::update() {
     if (ekf_initialized) {
         ekf_update(_payload_filtered, dt);
     }
-    
-    update_prediction_cache();
 
-    // EKF予測外力を使用
-    current_filtered_force = get_predicted_force();  // Δt秒後の予測外力
+    // EKFによる調和外力へ軸別位相進みを適用
+    current_filtered_force = get_phase_advanced_force();
 
     if (!_control_enabled) {
         // When control is disabled, output identity correction (no attitude change)
@@ -494,10 +506,11 @@ void AP_Observer::update() {
 
     // ログをSDカードに記録（毎回記録）
     Write_Observer_Log();
-    
+
 }
-    
-Quaternion AP_Observer::calculate_correction_from_force(const Vector3f& force) const {
+
+Quaternion AP_Observer::calculate_correction_from_force(const Vector3f& force) const
+{
     // FORCE_THRESHOLD によるマイルストーン足切りは完全に削除
 
     float correction_gain = _correction_gain.get();
@@ -515,7 +528,8 @@ Quaternion AP_Observer::calculate_correction_from_force(const Vector3f& force) c
 }
 
 // オイラー角形式で補正値を計算（ヨー角は常に0）
-Vector3f AP_Observer::calculate_correction_euler_from_force(const Vector3f& force) const {
+Vector3f AP_Observer::calculate_correction_euler_from_force(const Vector3f& force) const
+{
     // FORCE_THRESHOLD によるマイルストーン足切りは完全に削除
 
     float correction_gain = _correction_gain.get();
@@ -530,49 +544,75 @@ Vector3f AP_Observer::calculate_correction_euler_from_force(const Vector3f& forc
     return Vector3f(roll, pitch, 0.0f);
 }
 
-Vector3f AP_Observer::get_harmonic_sin_coeff() const {
+Vector3f AP_Observer::get_harmonic_sin_coeff() const
+{
     return Vector3f(ekf_state[0][0], ekf_state[1][0], ekf_state[2][0]);
 }
 
-Vector3f AP_Observer::get_harmonic_cos_coeff() const {
+Vector3f AP_Observer::get_harmonic_cos_coeff() const
+{
     return Vector3f(ekf_state[0][1], ekf_state[1][1], ekf_state[2][1]);
 }
 
-Vector3f AP_Observer::get_dc_offset() const {
+Vector3f AP_Observer::get_dc_offset() const
+{
     return Vector3f(ekf_state[0][2], ekf_state[1][2], ekf_state[2][2]);
 }
 
-Vector3f AP_Observer::get_predicted_force() const {
+Vector3f AP_Observer::get_phase_advanced_force() const
+{
     if (!ekf_initialized) {
         return _payload_filtered;  // 初期化前は通常の外力を返す
     }
-    const float pred_dt = _prediction_time.get();
-    Vector3f predicted;
+    Vector3f phase_advanced;
     for (uint8_t axis = 0; axis < EKF_NUM_AXES; axis++) {
         const float* state = ekf_state[axis];
-        const float omega = constrain_value(state[3], _ekf_omega_min.get(), _ekf_omega_max.get());
+        const float omega = MAX(1.0e-3f, constrain_value(state[3], _ekf_omega_min.get(), _ekf_omega_max.get()));
         const float d = state[0];
         const float d_dot = state[1];
         const float c = state[2];
-        const float d_pred = d + pred_dt * d_dot;
-        const float d_dot_pred = d_dot + pred_dt * (-(omega * omega) * d);
-        const float force = d_pred + c;
-        (void)d_dot_pred;
+        const float phase = get_axis_phase_command_rad(axis);
+        const float phase_cos = cosf(phase);
+        const float phase_sin = sinf(phase);
+        const float d_phase = d * phase_cos + (d_dot / omega) * phase_sin;
+        const float force = d_phase + c;
 
         if (axis == 0) {
-            predicted.x = force;
+            phase_advanced.x = force;
         } else if (axis == 1) {
-            predicted.y = force;
+            phase_advanced.y = force;
         } else {
-            predicted.z = force;
+            phase_advanced.z = force;
         }
     }
-    
-    return predicted;
+
+    return phase_advanced;
+}
+
+float AP_Observer::get_axis_estimated_amplitude(uint8_t axis) const
+{
+    return axis < EKF_NUM_AXES ? ekf_axis_amp[axis] : 0.0f;
+}
+
+float AP_Observer::get_axis_estimated_phase_rad(uint8_t axis) const
+{
+    return axis < EKF_NUM_AXES ? ekf_axis_phase_rad[axis] : 0.0f;
+}
+
+float AP_Observer::get_axis_phase_command_rad(uint8_t axis) const
+{
+    if (axis == 0) {
+        return radians(_phase_pitch.get());
+    }
+    if (axis == 1) {
+        return radians(_phase_roll.get());
+    }
+    return 0.0f;
 }
 
 // ログをSDカードに記録
-void AP_Observer::Write_Observer_Log() {
+void AP_Observer::Write_Observer_Log()
+{
 #if HAL_LOGGING_ENABLED
     AP_Logger *logger = AP_Logger::get_singleton();
     if (logger == nullptr) {
@@ -581,11 +621,11 @@ void AP_Observer::Write_Observer_Log() {
 
     // ログメッセージをカスタムフォーマットで書き込み
     // OBSV: TimeUS, PLX, PLY, PLZ, PFX, PFY, PFZ, FX, FY, CR, CP, SW, CE, ER
-    // PFX/PFY/PFZ = predicted force from EKF (replaces D, V, C internal states)
+    // PFX/PFY/PFZ = phase-advanced force from EKF
     // FX/FY = per-axis estimated frequency (Hz), no fused frequency field
     // CR/CP = correction Euler Roll/Pitch [rad]
     // CE = control enabled flag, ER = EKF reset triggered flag
-    const Vector3f predicted = get_predicted_force();
+    const Vector3f phase_advanced = get_phase_advanced_force();
     logger->Write("OBSV", "TimeUS,PLX,PLY,PLZ,PFX,PFY,PFZ,FX,FY,CR,CP,SW,CE,ER",
                   "s-------------", "F-------------",
                   "QffffffffffBBB",
@@ -593,9 +633,9 @@ void AP_Observer::Write_Observer_Log() {
                   _payload_filtered.x,
                   _payload_filtered.y,
                   _payload_filtered.z,
-                  predicted.x,           // PFX: predicted force X
-                  predicted.y,           // PFY: predicted force Y
-                  predicted.z,           // PFZ: predicted force Z
+                  phase_advanced.x,      // PFX: phase-advanced force X
+                  phase_advanced.y,      // PFY: phase-advanced force Y
+                  phase_advanced.z,      // PFZ: phase-advanced force Z
                   ekf_state[0][3] / (2.0f * M_PI), // FX: X-axis frequency
                   ekf_state[1][3] / (2.0f * M_PI), // FY: Y-axis frequency
                   current_correction_euler.x,       // CR: correction roll [rad]
@@ -603,6 +643,23 @@ void AP_Observer::Write_Observer_Log() {
                   (uint8_t)1,                       // SW: 常にON
                   (uint8_t)_control_enabled,        // CE: control enabled
                   (uint8_t)_ekf_reset_triggered);   // ER: EKF reset triggered
+
+    if ((ekf_sample_count % 10U) == 0U) {
+        for (uint8_t axis = 0; axis < 2; axis++) {
+            logger->Write("OBSD", "TimeUS,AX,D,DD,AMP,PSID,PHCD,OM,FD,VL",
+                          "s---d--d--", "F---------", "QBfffffffB",
+                          AP_HAL::micros64(),
+                          axis,
+                          ekf_state[axis][0],
+                          ekf_state[axis][1],
+                          get_axis_estimated_amplitude(axis),
+                          degrees(get_axis_estimated_phase_rad(axis)),
+                          degrees(get_axis_phase_command_rad(axis)),
+                          ekf_state[axis][3],
+                          _fade_gain[axis],
+                          ekf_axis_omega_updated[axis]);
+        }
+    }
 
     // Clear reset trigger flag after logging
     _ekf_reset_triggered = false;
@@ -626,55 +683,62 @@ void AP_Observer::Write_Observer_Log() {
 
 
 #ifdef AP_OBSERVER_REPLAY_TEST
-void AP_Observer::force_frequency_estimation_update(const Vector3f& payload) {
+void AP_Observer::force_frequency_estimation_update(const Vector3f& payload)
+{
     _payload_filtered = payload;
-    
+
     if (ekf_initialized) {
         ekf_update(_payload_filtered, 0.01f);
     }
 
 }
 
-void AP_Observer::set_params_for_replay(float freq, float gain) {
+void AP_Observer::set_params_for_replay(float freq, float gain)
+{
     _correction_gain.set(gain);
 
     // Reinitialize frequency state for replay runs.
     const float omega = constrain_value(freq * 2.0f * float(M_PI), _ekf_omega_min.get(), _ekf_omega_max.get());
     _ekf_omega_init.set(omega);
 
-    // Ensure EKF re-init usage of new params
-    update_prediction_cache();
+    // Ensure EKF re-init uses the new frequency parameter.
     ekf_init();
 }
 
-void AP_Observer::set_ekf_w_init_hz_for_replay(float freq_hz) {
+void AP_Observer::set_ekf_w_init_hz_for_replay(float freq_hz)
+{
     const float omega = freq_hz * 2.0f * M_PI;
     _ekf_omega_init.set(omega);
-    update_prediction_cache();
     ekf_init();
 }
 
 void AP_Observer::set_ekf_process_noises_for_replay(float q_d,
-                                                    float q_dd,
-                                                    float q_c) {
+        float q_dd,
+        float q_c)
+{
     _ekf_q_d.set(MAX(0.0f, q_d));
     _ekf_q_d_dot.set(MAX(0.0f, q_dd));
     _ekf_q_c.set(MAX(0.0f, q_c));
 }
 
-void AP_Observer::set_ekf_q_w_for_replay(float q_w) {
+void AP_Observer::set_ekf_q_w_for_replay(float q_w)
+{
     _ekf_q_omega.set(q_w);
 }
 
-void AP_Observer::set_ekf_r_meas_for_replay(float r_meas) {
+void AP_Observer::set_ekf_r_meas_for_replay(float r_meas)
+{
     _ekf_r_meas.set(r_meas);
 }
 
-void AP_Observer::set_prediction_time_for_replay(float pred_time_sec) {
-    _prediction_time.set(constrain_value(pred_time_sec, 0.0f, 0.5f));
+void AP_Observer::set_phase_for_replay(float roll_phase_deg, float pitch_phase_deg)
+{
+    _phase_roll.set(constrain_value(roll_phase_deg, -180.0f, 180.0f));
+    _phase_pitch.set(constrain_value(pitch_phase_deg, -180.0f, 180.0f));
 }
 
-void AP_Observer::set_ekf_innovation_limits_for_replay(float innov_max) {
+void AP_Observer::set_ekf_innovation_limits_for_replay(float innov_max)
+{
     _ekf_innov_max.set(MAX(1.0e-3f, innov_max));
 }
 
