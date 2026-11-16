@@ -10485,6 +10485,102 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         finally:
             self.context_pop()
 
+    def TestObserverAuxSwitches(self):
+        '''Test OBSERVER RC aux switches: USER_FUNC1(47) control ON/OFF, USER_FUNC2(48) EKF reset'''
+        self.context_push()
+        try:
+            self.set_parameters({
+                'LOG_DISARMED': 1,
+                'RC7_OPTION': 47,
+                'RC8_OPTION': 48,
+            })
+            self.customise_SITL_commandline([])
+            # INIT runs only on RC change; default RC7 PWM keeps firing the
+            # init-time aux call, so the DISABLED text below proves the
+            # USER_FUNC1(47) path executes on this build.
+            self.context_collect('STATUSTEXT')
+            self.reboot_sitl()
+            self.wait_statustext("AP_Observer: Control DISABLED", timeout=20,
+                                 check_context=True)
+            # USER_FUNC1 LOW still held -> control disabled (CE=0 in OBSV)
+            self.set_rc(7, 1100)
+            self.delay_sim_time(1, reason="let USER_FUNC1 LOW settle")
+            tstart = self.get_sim_time()
+            self.delay_sim_time(3, reason="collect OBSV with control disabled")
+            tend = self.get_sim_time()
+            mlog = self.dfreader_for_current_onboard_log()
+            ce_vals = []
+            while True:
+                m = mlog.recv_match(
+                    type='OBSV', blocking=False,
+                    condition="OBSV.TimeUS>%u and OBSV.TimeUS<%u" % (
+                        tstart * 1.0e6, tend * 1.0e6))
+                if m is None:
+                    break
+                if hasattr(m, 'CE'):
+                    ce_vals.append(int(m.CE))
+            if len(ce_vals) == 0:
+                raise NotAchievedException("No OBSV CE samples after USER_FUNC1 LOW")
+            if any(v != 0 for v in ce_vals):
+                raise NotAchievedException(f"OBSV CE not all 0 after DISABLED: {ce_vals[:10]}")
+            self.progress(f"USER_FUNC1 LOW: CE=0 confirmed ({len(ce_vals)} samples)")
+
+            # USER_FUNC1 HIGH -> control enabled (CE=1 in OBSV, GCS text ENABLED)
+            # Note: do not require the ENABLED STATUSTEXT via wait_statustext
+            # here. The hook was already armed before the LOW text arrived and
+            # can miss the HIGH text; CE in OBSV is the authoritative check.
+            self.set_rc(7, 1900)
+            self.delay_sim_time(1, reason="let USER_FUNC1 HIGH take effect")
+            tstart = self.get_sim_time()
+            self.delay_sim_time(3, reason="collect OBSV with control enabled")
+            tend = self.get_sim_time()
+            mlog = self.dfreader_for_current_onboard_log()
+            ce_vals = []
+            while True:
+                m = mlog.recv_match(
+                    type='OBSV', blocking=False,
+                    condition="OBSV.TimeUS>%u and OBSV.TimeUS<%u" % (
+                        tstart * 1.0e6, tend * 1.0e6))
+                if m is None:
+                    break
+                if hasattr(m, 'CE'):
+                    ce_vals.append(int(m.CE))
+            if len(ce_vals) == 0:
+                raise NotAchievedException("No OBSV CE samples after USER_FUNC1 HIGH")
+            if any(v != 1 for v in ce_vals):
+                raise NotAchievedException(f"OBSV CE not all 1 after ENABLED: {ce_vals[:10]}")
+            self.progress(f"USER_FUNC1 HIGH: CE=1 confirmed ({len(ce_vals)} samples)")
+
+            # USER_FUNC2 HIGH->LOW edge -> EKF reset (ER=1 once in OBSV, GCS text reset)
+            # Note: the HIGH->LOW transition can fire before wait_statustext
+            # arms its hook, so drain first then check context + fresh wait.
+            self.context_collect('STATUSTEXT')
+            self.set_rc(8, 1900)
+            self.delay_sim_time(1, reason="set USER_FUNC2 HIGH before falling edge")
+            self.set_rc(8, 1100)
+            try:
+                self.wait_statustext("AP_Observer: EKF reset to frequency", timeout=5)
+            except Exception:
+                self.wait_statustext("AP_Observer: EKF reset to frequency", timeout=20,
+                                     check_context=True)
+            self.delay_sim_time(2, reason="let ER flag land in OBSV log")
+            mlog = self.dfreader_for_current_onboard_log()
+            er_seen = False
+            while True:
+                m = mlog.recv_match(type='OBSV', blocking=False)
+                if m is None:
+                    break
+                if hasattr(m, 'ER') and int(m.ER) == 1:
+                    er_seen = True
+                    break
+            if not er_seen:
+                raise NotAchievedException("OBSV ER=1 not seen after USER_FUNC2 HIGH->LOW")
+            self.progress("USER_FUNC2 HIGH->LOW: ER=1 confirmed")
+
+            self.progress("PASS: ALL OBSERVER AUX SWITCH TESTS PASSED")
+        finally:
+            self.context_pop()
+
     def PosHoldTakeOff(self):
         """ensure vehicle stays put until it is ready to fly"""
         self.context_push()
@@ -19958,6 +20054,7 @@ class AutoTestCopterTestsObserver(AutoTestCopter):
             self.TestObserverParameters,
             self.TestObserverLogging,
             self.TestObserverEKFOperation,
+            self.TestObserverAuxSwitches,
         ]
 
 
