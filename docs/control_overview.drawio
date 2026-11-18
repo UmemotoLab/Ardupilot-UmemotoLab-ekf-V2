@@ -1,0 +1,155 @@
+<mxfile host="65bd71144e">
+    <diagram id="overall-dataflow" name="全体図・論文方式">
+        <mxGraphModel dx="679" dy="454" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1980" pageHeight="890" background="#FFFFFF" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=none;strokeColor=none;strokeWidth=1.6;fontSize=29;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;align=left;fontColor=#172B3A;fontStyle=1;" value="吊り荷制振の全体データフロー（論文方式）" vertex="1">
+                    <mxGeometry height="45" width="1850" x="40" y="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=none;strokeColor=none;strokeWidth=1.6;fontSize=18;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;align=left;fontColor=#172B3A;fontStyle=0;" value="既存EKFの出力は制御部への共通入力として集約し、提案する外力推定・制振経路を上段に示す。" vertex="1">
+                    <mxGeometry height="32" width="1850" x="40" y="67" as="geometry"/>
+                </mxCell>
+                <mxCell id="control" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=#F8FAFC;strokeColor=#91A4B7;strokeWidth=1.6;fontSize=18;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;rounded=1;arcSize=6;" value="" vertex="1">
+                    <mxGeometry height="240" width="1230" x="420" y="420" as="geometry"/>
+                </mxCell>
+                <mxCell id="control_title" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=none;strokeColor=none;strokeWidth=1.6;fontSize=20;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;align=left;fontColor=#172B3A;fontStyle=1;" value="既存ArduPilot：制御部" vertex="1">
+                    <mxGeometry height="30" width="1150" x="450" y="435" as="geometry"/>
+                </mxCell>
+                <mxCell id="nav" data-role="block" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=#EDF3FA;strokeColor=#607C98;strokeWidth=1.6;fontSize=18;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;" value="既存EKF&#xa;状態推定・前処理" vertex="1">
+                    <mxGeometry height="110" width="190" x="40" y="500" as="geometry"/>
+                </mxCell>
+                <mxCell id="position" data-role="block" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=#EDF3FA;strokeColor=#607C98;strokeWidth=1.6;fontSize=18;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;" value="位置制御&#xa;位置誤差から&#xa;目標速度を生成" vertex="1">
+                    <mxGeometry height="110" width="170" x="450" y="500" as="geometry"/>
+                </mxCell>
+                <mxCell id="velocity" data-role="block" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=#EDF3FA;strokeColor=#607C98;strokeWidth=1.6;fontSize=18;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;" value="速度制御&#xa;目標加速度・&#xa;姿勢目標を生成" vertex="1">
+                    <mxGeometry height="110" width="170" x="700" y="500" as="geometry"/>
+                </mxCell>
+                <mxCell id="attitude" data-role="block" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=#EDF3FA;strokeColor=#607C98;strokeWidth=1.6;fontSize=18;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;" value="姿勢角制御&#xa;姿勢誤差から&#xa;目標角速度を生成" vertex="1">
+                    <mxGeometry height="110" width="170" x="950" y="500" as="geometry"/>
+                </mxCell>
+                <mxCell id="rate" data-role="block" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=#EDF3FA;strokeColor=#607C98;strokeWidth=1.6;fontSize=18;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;" value="角速度制御&#xa;各軸の制御出力&#xa;を生成" vertex="1">
+                    <mxGeometry height="110" width="170" x="1200" y="500" as="geometry"/>
+                </mxCell>
+                <mxCell id="motor" data-role="block" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=#EDF3FA;strokeColor=#607C98;strokeWidth=1.6;fontSize=18;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;" value="モータ制御&#xa;制御配分・&#xa;出力変換" vertex="1">
+                    <mxGeometry height="110" width="170" x="1450" y="500" as="geometry"/>
+                </mxCell>
+                <mxCell id="uav" data-role="block" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=#F2F5F8;strokeColor=#607C98;strokeWidth=1.6;fontSize=21;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;" value="UAV&#xa;機体・索&#xa;吊り荷" vertex="1">
+                    <mxGeometry height="110" width="180" x="1750" y="500" as="geometry"/>
+                </mxCell>
+                <mxCell id="residual" data-role="block" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=#FFF5E8;strokeColor=#B57B29;strokeWidth=1.6;fontSize=18;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;" value="外力の算出&#xa;機体加速度と推力指令から&#xa;機体に作用する外力を算出" vertex="1">
+                    <mxGeometry height="110" width="250" x="590" y="150" as="geometry"/>
+                </mxCell>
+                <mxCell id="vibration" data-role="block" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=#FFF5E8;strokeColor=#B57B29;strokeWidth=1.6;fontSize=18;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;" value="振動の推定（EKF）&#xa;外力の振動成分・定常成分と&#xa;振動周波数を推定" vertex="1">
+                    <mxGeometry height="110" width="250" x="900" y="150" as="geometry"/>
+                </mxCell>
+                <mxCell id="law" data-role="block" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=#FFF5E8;strokeColor=#B57B29;strokeWidth=1.6;fontSize=18;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;" value="姿勢補正角の生成&#xa;推定外力から補正角を計算&#xa;（ロール・ピッチ）&#xa;固定ゲインを使用" vertex="1">
+                    <mxGeometry height="110" width="250" x="1210" y="150" as="geometry"/>
+                </mxCell>
+                <mxCell id="attitude_sum" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=#FFF1EF;strokeColor=#C83C32;strokeWidth=1.6;fontSize=24;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;shape=ellipse;spacing=0;strokeWidth=2;" value="＋" vertex="1">
+                    <mxGeometry height="30" width="30" x="905" y="540" as="geometry"/>
+                </mxCell>
+                <mxCell id="state_input" edge="1" parent="1" source="nav" style="edgeStyle=none;html=0;rounded=0;endArrow=block;endFill=1;strokeColor=#345D7E;strokeWidth=2;dashed=0;exitX=1;exitY=0.5;exitPerimeter=0;entryX=0;entryY=0.5625;entryPerimeter=0;" target="control">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="p_to_v" edge="1" parent="1" source="position" style="edgeStyle=none;html=0;rounded=0;endArrow=block;endFill=1;strokeColor=#345D7E;strokeWidth=2;dashed=0;exitX=1;exitY=0.5;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;" target="velocity">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="v_to_sum" edge="1" parent="1" source="velocity" style="edgeStyle=none;html=0;rounded=0;endArrow=block;endFill=1;strokeColor=#345D7E;strokeWidth=2;dashed=0;exitX=1;exitY=0.5;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;" target="attitude_sum">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="sum_to_att" edge="1" parent="1" source="attitude_sum" style="edgeStyle=none;html=0;rounded=0;endArrow=block;endFill=1;strokeColor=#345D7E;strokeWidth=2;dashed=0;exitX=1;exitY=0.5;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;" target="attitude">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="att_to_rate" edge="1" parent="1" source="attitude" style="edgeStyle=none;html=0;rounded=0;endArrow=block;endFill=1;strokeColor=#345D7E;strokeWidth=2;dashed=0;exitX=1;exitY=0.5;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;" target="rate">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="rate_to_motor" edge="1" parent="1" source="rate" style="edgeStyle=none;html=0;rounded=0;endArrow=block;endFill=1;strokeColor=#345D7E;strokeWidth=2;dashed=0;exitX=1;exitY=0.5;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;" target="motor">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="motor_to_uav" edge="1" parent="1" source="motor" style="edgeStyle=none;html=0;rounded=0;endArrow=block;endFill=1;strokeColor=#345D7E;strokeWidth=2;dashed=0;exitX=1;exitY=0.5;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;" target="uav">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="residual_to_ekf" edge="1" parent="1" source="residual" style="edgeStyle=none;html=0;rounded=0;endArrow=block;endFill=1;strokeColor=#A87125;strokeWidth=2;dashed=0;exitX=1;exitY=0.5;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;" target="vibration">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="ekf_to_law" edge="1" parent="1" source="vibration" style="edgeStyle=none;html=0;rounded=0;endArrow=block;endFill=1;strokeColor=#A87125;strokeWidth=2;dashed=0;exitX=1;exitY=0.5;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;" target="law">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="correction" edge="1" parent="1" source="law" style="edgeStyle=none;html=0;rounded=0;endArrow=block;endFill=1;strokeColor=#C83C32;strokeWidth=3;dashed=0;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;" target="attitude_sum">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1335" y="355"/>
+                            <mxPoint x="920" y="355"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="throttle_measurement" edge="1" parent="1" source="motor" style="edgeStyle=none;html=0;rounded=0;endArrow=block;endFill=1;strokeColor=#A87125;strokeWidth=2;dashed=0;exitX=0.5;exitY=0;exitPerimeter=0;entryX=0.5;entryY=0;entryPerimeter=0;" target="residual">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1535" y="135"/>
+                            <mxPoint x="715" y="135"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="observations" edge="1" parent="1" source="uav" style="edgeStyle=none;html=0;rounded=0;endArrow=block;endFill=1;strokeColor=#557C77;strokeWidth=2;dashed=0;exitX=0.5;exitY=1;exitPerimeter=0;entryX=0.5;entryY=1;entryPerimeter=0;" target="nav">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1840" y="760"/>
+                            <mxPoint x="135" y="760"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="specific_force" edge="1" parent="1" source="nav" style="edgeStyle=none;html=0;rounded=0;endArrow=block;endFill=1;strokeColor=#557C77;strokeWidth=2;dashed=0;exitX=0.5;exitY=0;exitPerimeter=0;entryX=0;entryY=0.5;entryPerimeter=0;" target="residual">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="135" y="205"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="state_label" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=none;strokeColor=none;strokeWidth=1.6;fontSize=16;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;align=center;fontColor=#172B3A;fontStyle=0;" value="推定状態&#xa;（制御部の共通入力）" vertex="1">
+                    <mxGeometry height="55" width="180" x="165" y="445" as="geometry"/>
+                </mxCell>
+                <mxCell id="velocity_signal" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=none;strokeColor=none;strokeWidth=1.6;fontSize=16;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;align=center;fontColor=#172B3A;fontStyle=0;" value="目標速度" vertex="1">
+                    <mxGeometry height="26" width="80" x="620" y="474" as="geometry"/>
+                </mxCell>
+                <mxCell id="attitude_signal" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=none;strokeColor=none;strokeWidth=1.6;fontSize=15;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;align=center;fontColor=#172B3A;fontStyle=0;" value="目標姿勢角" vertex="1">
+                    <mxGeometry height="28" width="140" x="850" y="615" as="geometry"/>
+                </mxCell>
+                <mxCell id="rate_signal" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=none;strokeColor=none;strokeWidth=1.6;fontSize=16;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;align=center;fontColor=#172B3A;fontStyle=0;" value="目標角速度" vertex="1">
+                    <mxGeometry height="26" width="120" x="1100" y="470" as="geometry"/>
+                </mxCell>
+                <mxCell id="axis_signal" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=none;strokeColor=none;strokeWidth=1.6;fontSize=15;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;align=center;fontColor=#172B3A;fontStyle=0;" value="各軸制御出力" vertex="1">
+                    <mxGeometry height="26" width="140" x="1340" y="470" as="geometry"/>
+                </mxCell>
+                <mxCell id="motor_signal" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=none;strokeColor=none;strokeWidth=1.6;fontSize=16;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;align=center;fontColor=#172B3A;fontStyle=0;" value="各モータ指令" vertex="1">
+                    <mxGeometry height="28" width="120" x="1625" y="515" as="geometry"/>
+                </mxCell>
+                <mxCell id="disturbance_signal" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=none;strokeColor=none;strokeWidth=1.6;fontSize=15;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;align=center;fontColor=#172B3A;fontStyle=0;" value="水平方向の外力 ［N］" vertex="1">
+                    <mxGeometry height="30" width="250" x="745" y="270" as="geometry"/>
+                </mxCell>
+                <mxCell id="estimated_force_signal" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=none;strokeColor=none;strokeWidth=1.6;fontSize=15;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;align=center;fontColor=#172B3A;fontStyle=0;" value="制振に用いる推定外力 ［N］" vertex="1">
+                    <mxGeometry height="30" width="300" x="1030" y="270" as="geometry"/>
+                </mxCell>
+                <mxCell id="correction_label" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=none;strokeColor=none;strokeWidth=1.6;fontSize=18;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;align=left;fontColor=#B12C25;fontStyle=1;" value="姿勢補正角（ロール・ピッチ）［rad］&#xa;姿勢目標に加算（ヨー補正なし）" vertex="1">
+                    <mxGeometry height="53" width="420" x="945" y="365" as="geometry"/>
+                </mxCell>
+                <mxCell id="u_label" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=none;strokeColor=none;strokeWidth=1.6;fontSize=16;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;align=center;fontColor=#8A5A18;fontStyle=0;" value="スロットル出力（推力換算用）" vertex="1">
+                    <mxGeometry height="25" width="595" x="885" y="103" as="geometry"/>
+                </mxCell>
+                <mxCell id="f_label" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=none;strokeColor=none;strokeWidth=1.6;fontSize=17;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;align=center;fontColor=#426B66;fontStyle=0;" value="機体加速度 ［m/s²］" vertex="1">
+                    <mxGeometry height="28" width="235" x="345" y="173" as="geometry"/>
+                </mxCell>
+                <mxCell id="sensor_label" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=none;strokeColor=none;strokeWidth=1.6;fontSize=17;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;align=center;fontColor=#426B66;fontStyle=0;" value="センサ観測（IMU・GPS等）" vertex="1">
+                    <mxGeometry height="28" width="500" x="750" y="762" as="geometry"/>
+                </mxCell>
+                <mxCell id="legend" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=none;strokeColor=none;strokeWidth=1.6;fontSize=17;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;align=left;fontColor=#172B3A;fontStyle=0;" value="青：主制御のデータフロー　　緑：観測信号　　橙：外力推定　　赤：姿勢目標への補正" vertex="1">
+                    <mxGeometry height="28" width="1870" x="40" y="805" as="geometry"/>
+                </mxCell>
+                <mxCell id="note" parent="1" style="rounded=0;whiteSpace=wrap;html=0;align=center;verticalAlign=middle;spacing=8;fillColor=none;strokeColor=none;strokeWidth=1.6;fontSize=16;fontFamily=Noto Sans CJK JP;fontColor=#172B3A;align=left;fontColor=#172B3A;fontStyle=0;" value="注：位置・速度制御は水平／鉛直をまとめて表示。各制御器への帰還、目標値入力、通常推力の内部経路は省略。" vertex="1">
+                    <mxGeometry height="28" width="1870" x="40" y="840" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
